@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<title>Solana Sniper Bot</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #0b0e14; color: #e6e6e6; padding: 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #8a8f98; font-size: 13px; margin-bottom: 20px; }
+  .grid { display: grid; grid-template-columns: 340px 1fr; gap: 16px; align-items: start; }
+  .card {
+    background: #131722; border: 1px solid #232838; border-radius: 10px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: #8a8f98; margin: 0 0 12px; }
+  .card h2 .hint { text-transform: none; letter-spacing: 0; font-weight: 400; color: #565c68; }
+  .row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 14px; }
+  .row span:first-child { color: #8a8f98; }
+  .badge { padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .badge.on { background: #143d24; color: #4ade80; }
+  .badge.off { background: #3d1414; color: #f87171; }
+  .badge.live { background: #3d2814; color: #fbbf24; }
+  .badge.dry { background: #14293d; color: #60a5fa; }
+  .badge.watched { background: #143d24; color: #4ade80; }
+  button {
+    background: #2563eb; color: white; border: none; border-radius: 6px;
+    padding: 10px 14px; font-size: 14px; cursor: pointer; font-weight: 600; width: 100%; margin-top: 8px;
+  }
+  button.stop { background: #dc2626; }
+  button.secondary { background: #232838; }
+  button.small { width: auto; padding: 4px 10px; font-size: 12px; margin-top: 0; }
+  button.danger { background: #7f1d1d; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+  input[type=number], input[type=text] {
+    background: #0b0e14; border: 1px solid #232838; color: #e6e6e6;
+    border-radius: 6px; padding: 8px; width: 100%; font-size: 14px; margin-top: 4px;
+  }
+  label { font-size: 12px; color: #8a8f98; display: block; margin-top: 10px; }
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #232838; }
+  th { color: #8a8f98; font-weight: 500; }
+  .mono { font-family: ui-monospace, monospace; font-size: 12px; }
+  .log-line { font-family: ui-monospace, monospace; font-size: 12px; padding: 2px 0; }
+  .log-info { color: #8a8f98; }
+  .log-warn { color: #fbbf24; }
+  .log-error { color: #f87171; }
+  #logbox { max-height: 280px; overflow-y: auto; }
+  .warn-banner {
+    background: #3d2814; color: #fbbf24; border-radius: 8px; padding: 10px 14px;
+    font-size: 13px; margin-bottom: 16px;
+  }
+  .pnl-pos { color: #4ade80; font-weight: 600; }
+  .pnl-neg { color: #f87171; font-weight: 600; }
+  .pnl-na { color: #565c68; }
+  .add-row { display: flex; gap: 6px; margin-top: 8px; }
+  .add-row input { margin-top: 0; }
+  .wallet-list { list-style: none; margin: 8px 0 0; padding: 0; max-height: 160px; overflow-y: auto; }
+  .wallet-list li {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px; padding: 6px 0; border-bottom: 1px solid #232838; gap: 8px;
+  }
+  .wallet-list li:last-child { border-bottom: none; }
+  .empty-hint { color: #565c68; font-size: 12px; padding: 6px 0; }
+  .addr-cell { display: flex; align-items: center; gap: 6px; }
+  .copy-btn {
+    width: auto; margin-top: 0; padding: 2px 6px; font-size: 12px;
+    background: #232838; color: #8a8f98;
+  }
+  .copy-btn.copied { color: #4ade80; }
+  .sell-btns { display: flex; gap: 4px; }
+  .sell-btns button { width: auto; }
+  .mode-toggle { display: flex; gap: 6px; margin-top: 4px; }
+  .mode-toggle button { width: 50%; margin-top: 0; background: #232838; color: #8a8f98; }
+  .mode-toggle button.active { background: #2563eb; color: white; }
+  .mode-toggle button#modeAllBtn.active { background: #7f1d1d; color: #fca5a5; }
+</style>
+</head>
+<body>
+  <h1>🎯 Solana Sniper Bot</h1>
+  <div class="sub">Local dashboard — auto-buy pump.fun token baru saat deploy</div>
+  <div class="warn-banner">⚠️ Memecoin baru mayoritas berujung rug/honeypot. LIVE_TRADING mati secara default — jangan nyalakan sebelum kamu paham risikonya dan sudah tes di jumlah kecil.</div>
+
+  <div id="tokenGate" class="card">
+    <h2>Akses Dashboard</h2>
+    <label>Dashboard token (dari .env WEB_DASHBOARD_TOKEN)</label>
+    <input id="tokenInput" type="text" placeholder="masukkan token" />
+    <button onclick="saveToken()">Masuk</button>
+  </div>
+
+  <div id="app" style="display:none">
+    <div class="grid">
+      <div>
+        <div class="card">
+          <h2>Status</h2>
+          <div class="row"><span>Engine</span><span id="stRunning" class="badge off">STOPPED</span></div>
+          <div class="row"><span>Mode</span><span id="stMode" class="badge dry">DRY RUN</span></div>
+          <div class="row"><span>Mode sniping</span><span id="stSnipeMode" class="badge watched">WATCHLIST</span></div>
+          <div class="row"><span>Wallet</span><span id="stWallet" class="mono">-</span></div>
+          <div class="row"><span>Saldo wallet</span><span id="stBalance">-</span></div>
+          <div class="row"><span>Token terdeteksi</span><span id="stDetected">0</span></div>
+          <div class="row"><span>Trade berhasil</span><span id="stTrades">0/0</span></div>
+          <div class="row"><span>Posisi terbuka</span><span id="stPositions">0</span></div>
+          <button id="btnToggle" onclick="toggleEngine()">Start</button>
+        </div>
+
+        <div class="card">
+          <h2>Mode Sniping</h2>
+          <div class="mode-toggle">
+            <button id="modeWatchlistBtn" class="active" onclick="setMode('watchlist')">Watchlist</button>
+            <button id="modeAllBtn" onclick="setMode('all')">Snipe All</button>
+          </div>
+          <div id="modeHint" class="empty-hint" style="margin-top:8px"></div>
+          <label>Maksimal token dibeli per sesi <span class="empty-hint">0 = tidak dibatasi</span></label>
+          <input id="cfgMaxBuys" type="number" step="1" min="0" />
+          <div class="row" style="margin-top:6px"><span>Dibeli sesi ini</span><span id="stBuysThisSession">0</span></div>
+          <button class="secondary" onclick="saveMaxBuys()">Simpan</button>
+        </div>
+
+        <div class="card">
+          <h2>Parameter Beli</h2>
+          <label>Buy amount (SOL)</label>
+          <input id="cfgAmount" type="number" step="0.001" min="0" />
+          <div class="two-col">
+            <div>
+              <label>Slippage beli (%)</label>
+              <input id="cfgSlippageBuy" type="number" step="1" min="0" />
+            </div>
+            <div>
+              <label>Slippage jual (%)</label>
+              <input id="cfgSlippageSell" type="number" step="1" min="0" />
+            </div>
+          </div>
+          <label>Priority fee (SOL) <span class="empty-hint">total per tx, bukan lamport</span></label>
+          <input id="cfgPriorityFee" type="number" step="0.00001" min="0" />
+          <div class="toggle-row">
+            <span>Live trading</span>
+            <input id="cfgLive" type="checkbox" />
+          </div>
+          <button class="secondary" onclick="saveConfig()">Simpan</button>
+        </div>
+
+        <div class="card">
+          <h2>Take Profit / Stop Loss</h2>
+          <div class="two-col">
+            <div>
+              <label>Take profit (%)</label>
+              <input id="cfgTakeProfit" type="number" step="1" min="0" />
+            </div>
+            <div>
+              <label>Stop loss (%)</label>
+              <input id="cfgStopLoss" type="number" step="1" min="0" />
+            </div>
+          </div>
+          <label>Max creator buy (SOL) <span class="empty-hint">0 = nonaktif</span></label>
+          <input id="cfgMaxCreatorBuy" type="number" step="0.01" min="0" />
+          <div class="empty-hint" style="margin-top:6px">
+            Batal beli kalau creator sudah masuk lebih dari jumlah ini ke bonding curve saat kita cek
+            (dicek sesaat sebelum beli — bukan pembatalan transaksi yang sudah terkirim).
+          </div>
+          <button class="secondary" onclick="saveConfig()">Simpan</button>
+        </div>
+
+        <div class="card">
+          <h2>Watched Dev Wallets <span class="hint">— hanya snipe dari wallet ini</span></h2>
+          <div class="add-row">
+            <input id="watchAddress" type="text" placeholder="alamat wallet dev (base58)" />
+            <button class="small secondary" onclick="addWatched()">Tambah</button>
+          </div>
+          <ul id="watchList" class="wallet-list"></ul>
+          <div id="watchlistHint" class="empty-hint" style="margin-top:6px">Kosong = bot tidak snipe siapa pun. Tambahkan minimal satu wallet dev untuk mengaktifkan sniping.</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <h2>Posisi Terbuka</h2>
+          <table>
+            <thead><tr><th>Address token</th><th>SOL masuk</th><th>PnL</th><th>TP/SL</th><th>Jual</th></tr></thead>
+            <tbody id="positionTable"></tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h2>Log</h2>
+          <div id="logbox"></div>
+        </div>
+
+        <div class="card">
+          <h2>Token Terdeteksi Terbaru</h2>
+          <table>
+            <thead><tr><th>Waktu</th><th>Symbol</th><th>Mint</th><th>Creator</th></tr></thead>
+            <tbody id="tokenTable"></tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <h2>Riwayat Trade</h2>
+          <table>
+            <thead><tr><th>Waktu</th><th>Sisi</th><th>Mint</th><th>SOL</th><th>Status</th></tr></thead>
+            <tbody id="tradeTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+let token = localStorage.getItem("dashboardToken") || "";
+let watchedWallets = [];
+let currentSnipeMode = "watchlist";
+
+function saveToken() {
+  token = document.getElementById("tokenInput").value.trim();
+  localStorage.setItem("dashboardToken", token);
+  init();
+}
+
+function api(path, opts = {}) {
+  return fetch(path, {
+    ...opts,
+    headers: { "Content-Type": "application/json", "x-dashboard-token": token, ...(opts.headers || {}) },
+  }).then((r) => {
+    if (r.status === 401) throw new Error("unauthorized");
+    return r.json();
+  });
+}
+
+function fmtTime(ts) {
+  return new Date(ts).toLocaleTimeString();
+}
+
+function shortAddr(a) {
+  return a ? a.slice(0, 4) + "..." + a.slice(-4) : "-";
+}
+
+function isFieldFocused(id) {
+  return document.activeElement && document.activeElement.id === id;
+}
+
+async function refresh() {
+  try {
+    const status = await api("/api/status");
+    document.getElementById("tokenGate").style.display = "none";
+    document.getElementById("app").style.display = "block";
+
+    const running = document.getElementById("stRunning");
+    running.textContent = status.running ? "RUNNING" : "STOPPED";
+    running.className = "badge " + (status.running ? "on" : "off");
+
+    const mode = document.getElementById("stMode");
+    mode.textContent = status.liveTrading ? "LIVE" : "DRY RUN";
+    mode.className = "badge " + (status.liveTrading ? "live" : "dry");
+
+    document.getElementById("stWallet").textContent = status.walletAddress || "-";
+    document.getElementById("stBalance").textContent =
+      status.walletBalanceSol == null ? "-" : status.walletBalanceSol.toFixed(4) + " SOL";
+    document.getElementById("stDetected").textContent = status.tokensDetected;
+    document.getElementById("stTrades").textContent = status.tradesSucceeded + "/" + status.tradesAttempted;
+    document.getElementById("stPositions").textContent = status.openPositions;
+
+    const snipeModeBadge = document.getElementById("stSnipeMode");
+    snipeModeBadge.textContent = status.snipeMode === "all" ? "SNIPE ALL" : "WATCHLIST";
+    snipeModeBadge.className = "badge " + (status.snipeMode === "all" ? "live" : "watched");
+    document.getElementById("stBuysThisSession").textContent =
+      status.buysThisSession + " / " + (status.maxBuysPerSession > 0 ? status.maxBuysPerSession : "∞");
+
+    currentSnipeMode = status.snipeMode;
+    renderModeButtons();
+
+    const btn = document.getElementById("btnToggle");
+    btn.textContent = status.running ? "Stop" : "Start";
+    btn.className = status.running ? "stop" : "";
+
+    const fields = {
+      cfgAmount: status.buyAmountSol,
+      cfgSlippageBuy: status.slippageBuyPercent,
+      cfgSlippageSell: status.slippageSellPercent,
+      cfgPriorityFee: status.priorityFeeSol,
+      cfgTakeProfit: status.takeProfitPercent,
+      cfgStopLoss: status.stopLossPercent,
+      cfgMaxCreatorBuy: status.maxCreatorBuySol,
+      cfgMaxBuys: status.maxBuysPerSession,
+    };
+    for (const [id, value] of Object.entries(fields)) {
+      if (!isFieldFocused(id)) document.getElementById(id).value = value;
+    }
+    document.getElementById("cfgLive").checked = status.liveTrading;
+
+    const [logs, tokens, trades, watchlist, positions] = await Promise.all([
+      api("/api/logs"),
+      api("/api/tokens"),
+      api("/api/trades"),
+      api("/api/watchlist"),
+      api("/api/positions"),
+    ]);
+
+    const logbox = document.getElementById("logbox");
+    logbox.innerHTML = logs
+      .slice()
+      .reverse()
+      .map((l) => `<div class="log-line log-${l.level}">[${fmtTime(l.ts)}] ${l.msg}</div>`)
+      .join("");
+
+    watchedWallets = watchlist;
+    renderWatchlist();
+
+    document.getElementById("tokenTable").innerHTML = tokens
+      .map((t) => {
+        const watched = watchedWallets.includes(t.creator);
+        return `<tr><td>${fmtTime(t.detectedAt)}</td><td>${t.symbol || "-"}</td><td class="mono">${t.mint.slice(0, 8)}...</td><td class="mono">${shortAddr(t.creator)}${watched ? ' <span class="badge watched">watched</span>' : ""}</td></tr>`;
+      })
+      .join("");
+
+    document.getElementById("tradeTable").innerHTML = trades
+      .map(
+        (t) =>
+          `<tr><td>${fmtTime(t.timestamp)}</td><td>${t.side}${t.reason ? " (" + t.reason + ")" : ""}</td><td class="mono">${t.mint.slice(0, 8)}...</td><td>${t.amountSol}</td><td>${t.dryRun ? "DRY RUN" : t.ok ? "OK" : "FAILED"}</td></tr>`
+      )
+      .join("");
+
+    document.getElementById("positionTable").innerHTML = positions.length
+      ? positions
+          .map((p) => {
+            const pnl = p.pnlPercent;
+            const pnlCls = pnl == null ? "pnl-na" : pnl >= 0 ? "pnl-pos" : "pnl-neg";
+            const pnlText = pnl == null ? "-" : (pnl >= 0 ? "+" : "") + pnl.toFixed(1) + "%";
+            return `<tr>
+              <td><div class="addr-cell"><span class="mono">${shortAddr(p.mint)}</span><button class="small copy-btn" onclick="copyAddress(this, '${p.mint}')">📋</button></div></td>
+              <td>${p.amountSolSpent.toFixed(4)}</td>
+              <td class="${pnlCls}">${pnlText}</td>
+              <td>+${p.takeProfitPercent}% / -${p.stopLossPercent}%</td>
+              <td><div class="sell-btns">
+                <button class="small danger" onclick="sellPosition('${p.mint}', 33)">33%</button>
+                <button class="small danger" onclick="sellPosition('${p.mint}', 50)">50%</button>
+                <button class="small danger" onclick="sellPosition('${p.mint}', 100)">100%</button>
+              </div></td>
+            </tr>`;
+          })
+          .join("")
+      : `<tr><td colspan="5" class="empty-hint">Tidak ada posisi terbuka.</td></tr>`;
+  } catch (e) {
+    document.getElementById("tokenGate").style.display = "block";
+    document.getElementById("app").style.display = "none";
+  }
+}
+
+function renderWatchlist() {
+  const list = document.getElementById("watchList");
+  list.innerHTML = watchedWallets.length
+    ? watchedWallets
+        .map(
+          (a) =>
+            `<li><span class="mono">${a}</span><button class="small danger" onclick="removeWatched('${a}')">Hapus</button></li>`
+        )
+        .join("")
+    : `<li class="empty-hint">Belum ada wallet dev yang di-watch.</li>`;
+
+  document.getElementById("watchlistHint").textContent =
+    currentSnipeMode === "all"
+      ? "Mode Snipe All aktif — watchlist ini tidak dipakai untuk filter sniping."
+      : "Kosong = bot tidak snipe siapa pun. Tambahkan minimal satu wallet dev untuk mengaktifkan sniping.";
+}
+
+function renderModeButtons() {
+  document.getElementById("modeWatchlistBtn").classList.toggle("active", currentSnipeMode === "watchlist");
+  document.getElementById("modeAllBtn").classList.toggle("active", currentSnipeMode === "all");
+  document.getElementById("modeHint").textContent =
+    currentSnipeMode === "all"
+      ? "⚠️ Bot mencoba beli SEMUA token baru yang lolos filter keamanan dasar, bukan cuma dari watchlist."
+      : "Bot hanya snipe token dari wallet dev di watchlist.";
+}
+
+async function toggleEngine() {
+  const status = await api("/api/status");
+  await api(status.running ? "/api/stop" : "/api/start", { method: "POST" });
+  refresh();
+}
+
+async function saveConfig() {
+  await api("/api/config", {
+    method: "POST",
+    body: JSON.stringify({
+      buyAmountSol: parseFloat(document.getElementById("cfgAmount").value),
+      slippageBuyPercent: parseFloat(document.getElementById("cfgSlippageBuy").value),
+      slippageSellPercent: parseFloat(document.getElementById("cfgSlippageSell").value),
+      priorityFeeSol: parseFloat(document.getElementById("cfgPriorityFee").value),
+      takeProfitPercent: parseFloat(document.getElementById("cfgTakeProfit").value),
+      stopLossPercent: parseFloat(document.getElementById("cfgStopLoss").value),
+      maxCreatorBuySol: parseFloat(document.getElementById("cfgMaxCreatorBuy").value),
+      liveTrading: document.getElementById("cfgLive").checked,
+    }),
+  });
+  refresh();
+}
+
+async function setMode(mode) {
+  if (mode === currentSnipeMode) return;
+  const maxBuys = parseFloat(document.getElementById("cfgMaxBuys").value) || 0;
+  if (mode === "all") {
+    if (!(maxBuys > 0)) {
+      alert('Isi dulu "Maksimal token dibeli per sesi" (lebih dari 0) sebelum mengaktifkan mode Snipe All.');
+      return;
+    }
+    if (
+      !confirm(
+        "Snipe All akan mencoba membeli SEMUA token baru yang lolos filter keamanan dasar, bukan cuma dari watchlist. Lanjutkan?"
+      )
+    )
+      return;
+  }
+  const r = await api("/api/config", {
+    method: "POST",
+    body: JSON.stringify({ snipeMode: mode, maxBuysPerSession: maxBuys }),
+  });
+  if (r.error) alert(r.error);
+  refresh();
+}
+
+async function saveMaxBuys() {
+  const maxBuys = parseFloat(document.getElementById("cfgMaxBuys").value) || 0;
+  const r = await api("/api/config", {
+    method: "POST",
+    body: JSON.stringify({ snipeMode: currentSnipeMode, maxBuysPerSession: maxBuys }),
+  });
+  if (r.error) alert(r.error);
+  refresh();
+}
+
+async function addWatched() {
+  const input = document.getElementById("watchAddress");
+  const address = input.value.trim();
+  if (!address) return;
+  const r = await api("/api/watchlist/add", { method: "POST", body: JSON.stringify({ address }) });
+  if (r.error) {
+    alert(r.error);
+    return;
+  }
+  input.value = "";
+  refresh();
+}
+
+async function removeWatched(address) {
+  await api("/api/watchlist/remove", { method: "POST", body: JSON.stringify({ address }) });
+  refresh();
+}
+
+async function sellPosition(mint, percent) {
+  if (!confirm(`Jual ${percent}% dari posisi ini sekarang?`)) return;
+  await api("/api/positions/sell", { method: "POST", body: JSON.stringify({ mint, percent }) });
+  refresh();
+}
+
+function copyAddress(btn, address) {
+  navigator.clipboard.writeText(address).then(() => {
+    const original = btn.textContent;
+    btn.textContent = "✅";
+    btn.classList.add("copied");
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.classList.remove("copied");
+    }, 1200);
+  });
+}
+
+function init() {
+  if (token) {
+    document.getElementById("tokenInput").value = token;
+  }
+  refresh();
+}
+
+init();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>
